@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1258106437 source:d:\pd-repo\cpp\org\dassista\prc\main.c
+	<windows.h>
+	"include\neko.h"
+
+1255331258 d:\pd-repo\cpp\org\dassista\prc\include\neko.h
+	<stddef.h>
+	<stdint.h>
+	<errno.h>
+
