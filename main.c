@@ -8,12 +8,11 @@ PROCESS_INFORMATION PrepAndLaunchRedirectedChild(char* cmd,
                                  HANDLE hChildStdErr);
 
 HANDLE hChildProcess = NULL;
-HANDLE hStdIn = NULL; // Handle to parents std input.
-BOOL bRunThread = TRUE;
-char* output = "test";
+buffer output;
 
 value exec(value cmd)
 {
+    output = alloc_buffer("");
   HANDLE hOutputReadTmp,hOutputRead,hOutputWrite;
   HANDLE hErrorWrite;
   SECURITY_ATTRIBUTES sa;
@@ -29,7 +28,7 @@ value exec(value cmd)
   if (!CreatePipe(&hOutputReadTmp,&hOutputWrite,&sa,0))
   {
      DisplayError("CreatePipe");
-     return alloc_string(output);
+     return buffer_to_string(output);
   }
 
 
@@ -41,7 +40,7 @@ value exec(value cmd)
                        TRUE,DUPLICATE_SAME_ACCESS))
     {
      DisplayError("DuplicateHandle");
-     return alloc_string(output);
+     return buffer_to_string(output);
     }
 
 
@@ -56,39 +55,41 @@ value exec(value cmd)
                        DUPLICATE_SAME_ACCESS))
     {
      DisplayError("DupliateHandle");
-     return alloc_string(output);
+     return buffer_to_string(output);
     }
 
 
     // Close inheritable copies of the handles you do not want to be
     // inherited.
-    if (!CloseHandle(hOutputReadTmp)) { DisplayError("CloseHandle"); return alloc_string(output);}
+    if (!CloseHandle(hOutputReadTmp)) { DisplayError("CloseHandle"); return buffer_to_string(output);}
 
 
   PROCESS_INFORMATION pi = PrepAndLaunchRedirectedChild(val_string(cmd),hOutputWrite,hErrorWrite);
+  if(&pi == 0)
+    return buffer_to_string(output);
 
 
   // Close pipe handles (do not continue to modify the parent).
   // You need to make sure that no handles to the write end of the
   // output pipe are maintained in this process or else the pipe will
   // not close when the child process exits and the ReadFile will hang.
-  if (!CloseHandle(hOutputWrite)) { DisplayError("CloseHandle"); return alloc_string(output);}
-  if (!CloseHandle(hErrorWrite)) {DisplayError("CloseHandle"); return alloc_string(output);}
+  if (!CloseHandle(hOutputWrite)) { DisplayError("CloseHandle"); return buffer_to_string(output);}
+  if (!CloseHandle(hErrorWrite)) {DisplayError("CloseHandle"); return buffer_to_string(output);}
 
 
   // Read the child's output.
   ReadAndHandleOutput(hOutputRead);
   // Redirection is complete
 
-  // Tell the thread to exit and wait for thread to die.
-  bRunThread = FALSE;
-
   if (WaitForSingleObject(pi.hProcess,INFINITE) == WAIT_FAILED)
+  {
      DisplayError("WaitForSingleObject");
+     return buffer_to_string(output);
+  }
 
-  if (!CloseHandle(hOutputRead)) { DisplayError("CloseHandle"); return alloc_string(output);}
+  if (!CloseHandle(hOutputRead)) { DisplayError("CloseHandle"); return buffer_to_string(output);}
 
-  return alloc_string(output);
+  return buffer_to_string(output);
 }
 
 
@@ -110,16 +111,7 @@ PROCESS_INFORMATION PrepAndLaunchRedirectedChild(char* cmd,
   si.wShowWindow = SW_HIDE;
   si.hStdOutput = hChildStdOut;
   si.hStdError  = hChildStdErr;
-  // Use this if you want to hide the child:
-  //     si.wShowWindow = SW_HIDE;
-  // Note that dwFlags must include STARTF_USESHOWWINDOW if you want to
-  // use the wShowWindow flags.
 
-
-  // Launch the process that you want to redirect (in this case,
-  // Child.exe). Make sure Child.exe is in the same directory as
-  // redirect.c launch redirect from a command line to prevent location
-  // confusion.
   if (!CreateProcess(NULL,cmd,NULL,NULL,TRUE,
                      CREATE_NEW_CONSOLE,NULL,NULL,&si,&pi))
   {
@@ -134,6 +126,7 @@ PROCESS_INFORMATION PrepAndLaunchRedirectedChild(char* cmd,
 
   // Close any unnecessary handles.
   if (!CloseHandle(pi.hThread)) { DisplayError("CloseHandle"); return pi;}
+
   return pi;
 }
 
@@ -146,7 +139,6 @@ void ReadAndHandleOutput(HANDLE hPipeRead)
 {
   CHAR lpBuffer[256];
   DWORD nBytesRead;
-  DWORD nCharsWritten;
 
   while(TRUE)
   {
@@ -159,11 +151,9 @@ void ReadAndHandleOutput(HANDLE hPipeRead)
            DisplayError("ReadFile"); // Something bad happened.
      }
 
-     output = lpBuffer;
-     // Display the character read on the screen.
-     /* if (!WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE),lpBuffer,
-                       nBytesRead,&nCharsWritten,NULL))
-        DisplayError("WriteConsole"); */
+
+     buffer_append_sub(output, lpBuffer, nBytesRead);
+
   }
 }
 
@@ -187,10 +177,7 @@ void DisplayError(char *pszAPI)
      "ERROR: API    = %s.\n   error code = %d.\n   message    = %s.\n",
             pszAPI, GetLastError(), (char *)lpvMessageBuffer);
 
-   /*WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE),szPrintBuffer,
-                 lstrlen(szPrintBuffer),&nCharsWritten,NULL);*/
-   //strcat(output, szPrintBuffer);
-   output = szPrintBuffer;
+   buffer_append(output,szPrintBuffer);
 
    LocalFree(lpvMessageBuffer);
 }
