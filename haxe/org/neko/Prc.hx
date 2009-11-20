@@ -1,4 +1,4 @@
-package prc;
+package haxe.org.neko;
 
 class Prc
 {

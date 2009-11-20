@@ -1,5 +1,0 @@
-<project name="prc" url="http://localhost:8686" license="GPL">
-    <user name="outbounder"/>
-    <description>This project has a simple process execution implementation</description>
-    <version name="0.1">Initial release, everything is working correctly</version>
-</project>
